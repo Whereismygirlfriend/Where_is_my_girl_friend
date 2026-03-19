@@ -1,0 +1,2295 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>퍼즐 퀘스트 RPG</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:         #060a10;
+  --panel:      #0b1220;
+  --panel2:     #0d1528;
+  --border:     #162230;
+  --border-hi:  #1e3348;
+  --player-clr: #3a8fd0;
+  --boss-clr:   #d03a3a;
+  --text:       #c8dded;
+  --muted:      #2e4a62;
+  --muted-hi:   #4a6a82;
+  --atk:  #e84040;
+  --def:  #3080d8;
+  --spl:  #28c860;
+  --hel:  #e030a0;
+  --ap:   #f0c040;
+  --shld: #50c8ff;
+  --cfg-w: 290px;
+  --battle-w: 360px;
+  --log-w: 240px;
+  --header-h: 52px;
+  --footer-h: 40px;
+}
+
+html, body {
+  width: 100%; height: 100%;
+  overflow: hidden;
+  background: var(--bg);
+  font-family: 'Courier New', Courier, monospace;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+  color: var(--text);
+}
+
+/* scanlines on everything */
+body::before {
+  content: '';
+  position: fixed; inset: 0;
+  background: repeating-linear-gradient(0deg, rgba(0,0,0,0.035) 0px, rgba(0,0,0,0.035) 1px, transparent 1px, transparent 4px);
+  pointer-events: none; z-index: 9999;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   ROOT LAYOUT  — three columns side by side, full viewport
+═══════════════════════════════════════════════════════════════ */
+#root {
+  display: flex;
+  width: 100vw;
+  height: 100vh;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   LEFT — CONFIG PANEL
+═══════════════════════════════════════════════════════════════ */
+#config-panel {
+  width: var(--cfg-w);
+  max-width: var(--cfg-w);
+  height: 100%;
+  flex-shrink: 0;
+  background: #080f1c;
+  border-right: 1px solid var(--border-hi);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  overflow: clip;     /* clip은 hidden보다 강력 — 스크롤 가능성 자체를 제거 */
+  position: relative;
+  contain: paint;
+  z-index: 2;
+}
+
+.cfg-header {
+  flex-shrink: 0;
+  height: var(--header-h);
+  display: flex; align-items: center; justify-content: center;
+  border-bottom: 1px solid var(--border-hi);
+  background: rgba(0,0,0,0.4);
+}
+.cfg-header span { font-size: 13px; font-weight: 700; letter-spacing: 1px; color: var(--text); }
+
+.cfg-scroll {
+  flex: 1;
+  min-height: 0;
+  width: 100%;           /* 명시적 너비 고정 */
+  max-width: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+  box-sizing: border-box;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-hi) transparent;
+}
+.cfg-scroll::-webkit-scrollbar { width: 3px; }
+.cfg-scroll::-webkit-scrollbar-thumb { background: var(--border-hi); border-radius: 2px; }
+
+/* 각 섹션: overflow:hidden 으로 자식 클립 */
+.cfg-section {
+  padding: 13px 14px 11px;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  overflow: hidden;
+  min-width: 0;
+}
+
+/* 섹션 레이블: 이모지+텍스트, 제목 잘림 방지 */
+.cfg-lbl {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  padding-bottom: 7px;
+  border-bottom: 1px solid var(--border);
+  min-height: 24px;
+  overflow: hidden;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+.cfg-lbl .lbl-icon {
+  font-size: 13px;
+  flex-shrink: 0;
+  width: 16px;
+  text-align: center;
+  line-height: 1;
+}
+.cfg-lbl .lbl-text {
+  flex: 1;
+  min-width: 0;
+  white-space: normal;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  line-height: 1.3;
+  overflow: hidden;
+}
+.cfg-lbl.player { color: var(--player-clr); }
+.cfg-lbl.boss   { color: var(--boss-clr); }
+.cfg-lbl.cfg-tile   { color: var(--muted-hi); }
+.cfg-lbl.combo  { color: var(--ap); }
+.cfg-lbl.gauge  { color: var(--spl); }
+
+.cfg-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  overflow: hidden;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+.cfg-row label {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--muted-hi);
+  flex-shrink: 0;
+  width: 58px;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: block;
+}
+
+.cfg-row input[type="number"] {
+  flex: 1;
+  min-width: 0;
+  background: rgba(0,0,0,0.55);
+  border: 1px solid var(--border-hi);
+  border-radius: 7px;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  padding: 5px 7px;
+  outline: none;
+  text-align: right;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.cfg-row input:focus        { border-color: var(--player-clr); box-shadow: 0 0 0 2px rgba(58,143,208,0.2); }
+.cfg-row.boss-row input:focus  { border-color: var(--boss-clr); box-shadow: 0 0 0 2px rgba(208,58,58,0.2); }
+.cfg-row.gauge-row input:focus { border-color: var(--spl);      box-shadow: 0 0 0 2px rgba(40,200,96,0.2); }
+
+/* 타일 효과량 2x2 그리드 */
+.cfg-tile-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 7px;
+  overflow: hidden;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+.cfg-tile-cell {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(0,0,0,0.35);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 8px;
+  overflow: hidden;
+  min-width: 0;
+}
+.cfg-tile-cell .emoji {
+  font-size: 15px;
+  flex-shrink: 0;
+  width: 20px;
+  text-align: center;
+  line-height: 1;
+}
+.cfg-tile-cell input[type="number"] {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: none;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  padding: 0;
+  outline: none;
+  text-align: right;
+}
+.cfg-tile-cell[data-t="0"] { border-color: rgba(232,64,64,0.4); }
+.cfg-tile-cell[data-t="1"] { border-color: rgba(48,128,216,0.4); }
+.cfg-tile-cell[data-t="2"] { border-color: rgba(40,200,96,0.4); }
+.cfg-tile-cell[data-t="3"] { border-color: rgba(224,48,160,0.4); }
+.cfg-tile-cell:focus-within[data-t="0"] { border-color: rgba(232,64,64,0.85); }
+.cfg-tile-cell:focus-within[data-t="1"] { border-color: rgba(48,128,216,0.85); }
+.cfg-tile-cell:focus-within[data-t="2"] { border-color: rgba(40,200,96,0.85); }
+.cfg-tile-cell:focus-within[data-t="3"] { border-color: rgba(224,48,160,0.85); }
+
+/* 설명 텍스트 (계산식, 안내 등) */
+.cfg-note {
+  font-size: 10px;
+  color: var(--muted);
+  line-height: 1.9;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  overflow: hidden;
+  min-width: 0;
+}
+.cfg-note strong { color: var(--muted-hi); }
+
+.cfg-note-rows {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
+  min-width: 0;
+}
+.cfg-note-row {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  font-size: 10px;
+  color: var(--muted);
+  line-height: 1.9;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
+  min-width: 0;
+}
+.cfg-note-row .nr-icon {
+  flex-shrink: 0;
+  width: 16px;
+  text-align: center;
+  line-height: 1;
+}
+.cfg-note-row > span:last-child {
+  flex: 1;
+  min-width: 0;
+  white-space: normal;
+  word-break: break-word;      /* break-all → break-word: 더 자연스러운 줄바꿈 */
+  overflow-wrap: anywhere;    /* 가장 강력한 줄바꿈 모드 */
+  overflow: hidden;
+}
+
+/* AP 게이지 카드 */
+.ap-gauge-card {
+  background: rgba(40,200,96,0.07);
+  border: 1px solid rgba(40,200,96,0.25);
+  border-radius: 10px;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  overflow: hidden;
+  transition: border-color 0.3s, box-shadow 0.3s;
+}
+.ap-gauge-top  { display: flex; justify-content: space-between; align-items: center; }
+.ap-gauge-lbl  { font-size: 11px; font-weight: 700; color: var(--spl); }
+.ap-gauge-frac { font-size: 13px; font-weight: 900; color: var(--spl); }
+.ap-gauge-bar-track { width: 100%; height: 8px; background: rgba(0,0,0,0.5); border-radius: 4px; overflow: hidden; }
+.ap-gauge-bar-fill {
+  height: 100%; width: 0%;
+  background: linear-gradient(90deg, #0d5020, var(--spl), #a0ffc0);
+  border-radius: 4px;
+  transition: width 0.4s cubic-bezier(0.4,0,0.2,1);
+  box-shadow: 0 0 8px var(--spl);
+}
+.ap-gauge-desc { font-size: 10px; color: rgba(40,200,96,0.55); overflow: hidden; }
+
+.cfg-sep { height: 1px; background: linear-gradient(90deg, transparent, var(--border-hi), transparent); margin: 2px 0; flex-shrink: 0; }
+
+.cfg-bottom {
+  flex-shrink: 0;
+  padding: 11px 14px;
+  border-top: 1px solid var(--border);
+  background: rgba(0,0,0,0.35);
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.cfg-btn {
+  width: 100%;
+  padding: 10px 0;
+  border: none;
+  border-radius: 9px;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  transition: filter 0.15s, transform 0.1s;
+}
+.cfg-btn:active { transform: scale(0.97); }
+#btn-apply {
+  background: linear-gradient(135deg, #1a5090, #3a8fd0);
+  color: #fff;
+  box-shadow: 0 3px 14px rgba(58,143,208,0.4), inset 0 1px 0 rgba(255,255,255,0.2);
+}
+#btn-apply:hover { filter: brightness(1.2); }
+#btn-reset { background: rgba(255,255,255,0.05); color: var(--muted-hi); border: 1px solid var(--border-hi); }
+#btn-reset:hover { color: var(--text); }
+#cfg-feedback {
+  height: 18px;
+  text-align: center;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--spl);
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+#cfg-feedback.show { opacity: 1; }
+
+/* ═══════════════════════════════════════════════════════════════
+   CENTER — BATTLE PANEL
+═══════════════════════════════════════════════════════════════ */
+#battle-panel {
+  width: var(--battle-w);
+  height: 100%;
+  flex-shrink: 0;
+  background: linear-gradient(180deg, #070e1c 0%, #060b18 100%);
+  border-right: 1px solid var(--border-hi);
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Battle header */
+#battle-header {
+  flex-shrink: 0; height: var(--header-h);
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 20px;
+  background: rgba(0,0,0,0.5);
+  border-bottom: 1px solid var(--border-hi);
+  z-index: 2;
+}
+#battle-header h1 { font-size: 15px; letter-spacing: 2px; color: var(--muted-hi); }
+#turn-indicator { font-size: 13px; font-weight: 700; letter-spacing: 1px; color: var(--player-clr); transition: color 0.4s; }
+
+/* ── BATTLE STAGE ── */
+#battle-stage {
+  flex-shrink: 0;
+  height: 240px;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Stage background layers */
+#stage-bg {
+  position: absolute; inset: 0;
+  background:
+    linear-gradient(180deg, #08122a 0%, #06101e 70%, #04080f 100%);
+}
+#stage-bg::before {
+  content: ''; position: absolute; inset: 0;
+  background:
+    radial-gradient(ellipse 55% 90% at 25% 60%, rgba(140,30,220,0.14) 0%, transparent 60%),
+    radial-gradient(ellipse 55% 90% at 75% 60%, rgba(220,40,40,0.12) 0%, transparent 60%);
+}
+/* Ground line */
+#stage-bg::after {
+  content: ''; position: absolute;
+  bottom: 42px; left: 8%; right: 8%;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, rgba(160,50,255,0.3) 30%, rgba(255,80,80,0.25) 70%, transparent);
+  filter: blur(1px);
+}
+
+/* Ground glow under each character */
+.char-shadow {
+  position: absolute;
+  bottom: 28px;
+  width: 70px; height: 14px;
+  border-radius: 50%;
+  filter: blur(6px);
+  pointer-events: none;
+  transition: opacity 0.4s;
+}
+#player-box .char-shadow { background: rgba(148,40,220,0.55); left: 50%; transform: translateX(-50%); }
+#boss-box   .char-shadow { background: rgba(208,58,58,0.45);  left: 50%; transform: translateX(-50%); }
+
+/* ── Character containers ── */
+.battle-char {
+  position: absolute;
+  bottom: 28px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+  z-index: 3;
+  animation: charBreathe 3s ease-in-out infinite;
+}
+
+#player-box { left: 14%; }
+#boss-box   { right: 10%; }
+
+/* 보스는 왼쪽을 향함 */
+#boss-box .char-sprite { transform: scaleX(-1); }
+
+@keyframes charBreathe {
+  0%, 100% { transform: translateY(0); }
+  50%       { transform: translateY(-5px); }
+}
+
+/* Character sprite circle */
+.char-sprite {
+  width: 88px; height: 88px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 44px;
+  position: relative;
+  flex-shrink: 0;
+  transition: filter 0.1s;
+}
+
+/* ── 데스나이트 (해골검사) 스프라이트 ── */
+#player-box .char-sprite {
+  background: radial-gradient(circle at 38% 32%, #3a0a6a, #12022a);
+  border: 2.5px solid rgba(148,40,220,0.9);
+  box-shadow:
+    0 0 28px rgba(148,40,220,0.65),
+    0 0 60px rgba(100,0,200,0.25),
+    inset 0 2px 0 rgba(255,255,255,0.1);
+}
+
+/* 해골 이모지 + 검 오버레이 */
+.dk-skull { font-size: 42px; line-height: 1; position: relative; z-index: 1; }
+.dk-sword {
+  position: absolute;
+  bottom: 4px; right: 4px;
+  font-size: 20px;
+  filter: drop-shadow(0 0 4px rgba(200,100,255,0.9));
+  z-index: 2;
+  /* 오른손 검 자세 */
+  transform: rotate(-35deg);
+}
+.dk-aura {
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  background: conic-gradient(from 0deg, transparent 60%, rgba(160,50,255,0.35) 80%, transparent 100%);
+  animation: dkAura 2.5s linear infinite;
+  z-index: 0;
+}
+@keyframes dkAura {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+#boss-box .char-sprite {
+  background: radial-gradient(circle at 38% 32%, #9e1e1e, #200808);
+  border: 2.5px solid rgba(208,58,58,0.85);
+  box-shadow: 0 0 28px rgba(208,58,58,0.55), 0 0 60px rgba(208,58,58,0.18), inset 0 2px 0 rgba(255,255,255,0.1);
+}
+
+.char-name-tag {
+  margin-top: 8px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  border-radius: 10px;
+  white-space: nowrap;
+}
+#player-box .char-name-tag {
+  color: #c060ff;
+  background: rgba(148,40,220,0.15);
+  border: 1px solid rgba(148,40,220,0.45);
+  text-shadow: 0 0 8px rgba(180,80,255,0.6);
+}
+#boss-box .char-name-tag {
+  color: var(--boss-clr);
+  background: rgba(208,58,58,0.12);
+  border: 1px solid rgba(208,58,58,0.3);
+}
+
+/* ── Attack / Hit animations ── */
+@keyframes playerAttack {
+  0%   { transform: translateX(0)     translateY(0); }
+  20%  { transform: translateX(0)     translateY(-10px); }
+  45%  { transform: translateX(120px) translateY(-5px); }
+  55%  { transform: translateX(118px) translateY(0) scaleX(1.1); }
+  70%  { transform: translateX(85px)  translateY(0); }
+  100% { transform: translateX(0)     translateY(0); }
+}
+@keyframes bossAttack {
+  0%   { transform: translateX(0)      translateY(0); }
+  20%  { transform: translateX(0)      translateY(-10px); }
+  45%  { transform: translateX(-120px) translateY(-5px); }
+  55%  { transform: translateX(-118px) translateY(0) scaleX(-1.1); }
+  70%  { transform: translateX(-85px)  translateY(0); }
+  100% { transform: translateX(0)      translateY(0); }
+}
+
+.battle-char.char-attacking { animation: none !important; }
+#player-box.char-attacking { animation: playerAttack 0.55s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards !important; }
+#boss-box.char-attacking   { animation: bossAttack   0.55s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards !important; }
+
+@keyframes charHitFlash {
+  0%   { filter: brightness(1) saturate(1); }
+  15%  { filter: brightness(4) saturate(0) invert(0.5); }
+  35%  { filter: brightness(2.5) saturate(0.5); }
+  60%  { filter: brightness(1.5) saturate(1); }
+  100% { filter: brightness(1) saturate(1); }
+}
+.battle-char.char-hit .char-sprite { animation: charHitFlash 0.45s ease forwards; }
+
+@keyframes charKO {
+  0%   { transform: translateY(0) rotate(0deg) scale(1); opacity: 1; }
+  30%  { transform: translateY(-10px) rotate(-8deg) scale(1.05); opacity: 1; }
+  60%  { transform: translateY(0) rotate(12deg) scale(0.9); opacity: 0.8; }
+  100% { transform: translateY(20px) rotate(0deg) scale(0.7); opacity: 0.3; }
+}
+.battle-char.char-ko { animation: charKO 0.6s ease forwards !important; }
+.battle-char.char-ko .char-shadow { opacity: 0.15; }
+
+/* ── Hit effect layer ── */
+#hit-effect-layer { position: absolute; inset: 0; pointer-events: none; z-index: 10; }
+.hit-burst {
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+  animation: hitBurstAnim 0.4s ease-out forwards;
+}
+@keyframes hitBurstAnim {
+  0%   { transform: scale(0); opacity: 0.9; }
+  60%  { transform: scale(1); opacity: 0.5; }
+  100% { transform: scale(1.4); opacity: 0; }
+}
+.hit-sparks {
+  position: absolute;
+  font-size: 26px;
+  pointer-events: none;
+  animation: sparkFloat 0.55s ease-out forwards;
+  transform-origin: center;
+}
+@keyframes sparkFloat {
+  0%   { opacity: 1; transform: scale(0.5) translateY(0); }
+  40%  { opacity: 1; transform: scale(1.3) translateY(-18px); }
+  100% { opacity: 0; transform: scale(0.8) translateY(-38px); }
+}
+
+/* ── HP bars floating above stage ── */
+.stage-hp {
+  position: absolute;
+  top: 12px;
+  display: flex; flex-direction: column; gap: 3px;
+  z-index: 4;
+  min-width: 110px;
+}
+#stage-hp-player { left: 6%; }
+#stage-hp-boss   { right: 6%; text-align: right; }
+.stage-hp-name {
+  font-size: 9px; font-weight: 700; letter-spacing: 1px;
+  text-transform: uppercase;
+}
+#stage-hp-player .stage-hp-name { color: var(--player-clr); }
+#stage-hp-boss   .stage-hp-name { color: var(--boss-clr); text-align: right; }
+.stage-hp-text {
+  font-size: 13px; font-weight: 900; color: var(--text);
+}
+#stage-hp-boss .stage-hp-text { text-align: right; }
+.stage-bar-track {
+  width: 100%; height: 7px; background: rgba(0,0,0,0.7);
+  border-radius: 4px; overflow: hidden; border: 1px solid rgba(255,255,255,0.07);
+}
+.stage-bar-fill {
+  height: 100%; border-radius: 4px; width: 100%;
+  transition: width 0.5s cubic-bezier(0.4,0,0.2,1);
+}
+#stage-hp-player .stage-bar-fill { background: linear-gradient(90deg, #3a0a6a, #8820cc, #c060ff); }
+#stage-hp-boss   .stage-bar-fill {
+  background: linear-gradient(90deg, #ff6060, #d03a3a, #901010);
+  /* reversed — fill from right */
+  direction: rtl;
+}
+
+/* ── Battle Stats Panels ── */
+#battle-stats {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-hi) transparent;
+}
+#battle-stats::-webkit-scrollbar { width: 3px; }
+#battle-stats::-webkit-scrollbar-thumb { background: var(--border-hi); }
+
+.bstat-panel {
+  padding: 10px 10px 8px;
+  display: flex; flex-direction: column; gap: 7px;
+  overflow: hidden;
+}
+#player-stat-panel {
+  border-right: 1px solid var(--border);
+  background: rgba(58,143,208,0.03);
+}
+#boss-stat-panel {
+  background: rgba(208,58,58,0.03);
+}
+
+.bstat-title {
+  font-size: 9px; font-weight: 700; letter-spacing: 1.5px;
+  text-transform: uppercase; padding-bottom: 6px;
+  border-bottom: 1px solid var(--border);
+}
+#player-stat-panel .bstat-title { color: var(--player-clr); }
+#boss-stat-panel   .bstat-title { color: var(--boss-clr); }
+
+/* reuse existing card styles */
+.hp-row { display: flex; flex-direction: column; gap: 3px; }
+.hp-label-row { display: flex; justify-content: space-between; }
+.hp-label { font-size: 9px; font-weight: 700; color: var(--muted-hi); }
+.hp-text  { font-size: 12px; font-weight: 700; color: var(--text); }
+.bar-track {
+  width: 100%; height: 7px; background: rgba(0,0,0,0.6);
+  border-radius: 4px; overflow: hidden; border: 1px solid rgba(255,255,255,0.06);
+}
+.bar-fill { height: 100%; border-radius: 4px; width: 100%; transition: width 0.5s cubic-bezier(0.4,0,0.2,1); }
+.player-panel .hp-fill, #player-stat-panel .hp-fill { background: linear-gradient(90deg, #3a0a6a, #8820cc, #c060ff); }
+.boss-panel   .hp-fill, #boss-stat-panel   .hp-fill { background: linear-gradient(90deg, #901010, #d03a3a, #ff6060); }
+
+/* small stat chips for boss panel */
+.bchip-row { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+.bchip {
+  background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.05);
+  border-radius: 7px; padding: 5px 4px; text-align: center;
+}
+.bchip-l { display: block; font-size: 8px; color: var(--muted-hi); margin-bottom: 1px; }
+.bchip-v { display: block; font-size: 14px; font-weight: 700; color: var(--text); }
+
+/* Shield card (compact) */
+.shield-card {
+  background: rgba(80,200,255,0.07); border: 1px solid rgba(80,200,255,0.25);
+  border-radius: 8px; padding: 6px 8px;
+  display: flex; flex-direction: column; gap: 4px;
+  transition: border-color 0.3s, box-shadow 0.3s;
+}
+.shield-top { display: flex; justify-content: space-between; align-items: center; }
+.shield-lbl { font-size: 9px; font-weight: 700; color: var(--shld); }
+.shield-num { font-size: 14px; font-weight: 900; color: var(--shld); }
+.shield-bar-track { width: 100%; height: 5px; background: rgba(0,0,0,0.5); border-radius: 3px; overflow: hidden; }
+.shield-bar-fill {
+  height: 100%; background: linear-gradient(90deg, #1a6080, var(--shld));
+  border-radius: 3px; width: 0%;
+  transition: width 0.5s cubic-bezier(0.4,0,0.2,1);
+  box-shadow: 0 0 6px var(--shld);
+}
+.shield-desc { font-size: 8px; color: rgba(80,200,255,0.5); }
+
+/* AP card (compact) */
+.ap-card {
+  background: rgba(240,192,64,0.07); border: 1px solid rgba(240,192,64,0.2);
+  border-radius: 8px; padding: 6px 8px;
+  display: flex; flex-direction: column; gap: 5px;
+}
+.ap-top { display: flex; justify-content: space-between; align-items: center; }
+.ap-lbl { font-size: 9px; font-weight: 700; color: var(--ap); }
+.ap-num { font-size: 14px; font-weight: 900; color: var(--ap); }
+.ap-pips { display: flex; gap: 5px; flex-wrap: wrap; }
+.ap-pip {
+  width: 12px; height: 12px; border-radius: 50%;
+  transition: background 0.25s, box-shadow 0.25s, opacity 0.25s;
+}
+.ap-pip.active { background: var(--ap); box-shadow: 0 0 6px var(--ap), 0 0 14px rgba(240,192,64,0.5); }
+.ap-pip.used   { background: var(--muted); opacity: 0.3; }
+
+/* AP gauge card (compact) */
+.ap-gauge-card {
+  background: rgba(40,200,96,0.07); border: 1px solid rgba(40,200,96,0.25);
+  border-radius: 8px; padding: 6px 8px;
+  display: flex; flex-direction: column; gap: 4px;
+  transition: border-color 0.3s, box-shadow 0.3s;
+}
+.ap-gauge-top { display: flex; justify-content: space-between; align-items: center; }
+.ap-gauge-lbl  { font-size: 9px; font-weight: 700; color: var(--spl); }
+.ap-gauge-frac { font-size: 14px; font-weight: 900; color: var(--spl); }
+.ap-gauge-bar-track { width: 100%; height: 6px; background: rgba(0,0,0,0.5); border-radius: 3px; overflow: hidden; }
+.ap-gauge-bar-fill {
+  height: 100%; width: 0%;
+  background: linear-gradient(90deg, #0d5020, var(--spl), #a0ffc0);
+  border-radius: 3px;
+  transition: width 0.4s cubic-bezier(0.4,0,0.2,1);
+  box-shadow: 0 0 8px var(--spl);
+}
+.ap-gauge-desc { font-size: 8px; color: rgba(40,200,96,0.5); }
+
+/* Battle footer */
+#battle-footer {
+  flex-shrink: 0; height: var(--footer-h);
+  display: flex; align-items: center; justify-content: center; gap: 16px;
+  border-top: 1px solid var(--border);
+  background: rgba(0,0,0,0.3); z-index: 2;
+}
+.legend { display: flex; align-items: center; gap: 5px; font-size: 10px; color: var(--muted-hi); }
+.ldot { width: 9px; height: 9px; border-radius: 2px; }
+
+@keyframes shakeHit {
+  0%,100% { transform: translateX(0); }
+  20% { transform: translateX(-7px); }
+  40% { transform: translateX(7px); }
+  60% { transform: translateX(-5px); }
+  80% { transform: translateX(4px); }
+}
+/* keep for legacy .hit class on combatant */
+.combatant.hit { animation: shakeHit 0.35s ease; }
+
+/* ═══════════════════════════════════════════════════════════════
+   RIGHT — PUZZLE PANEL
+═══════════════════════════════════════════════════════════════ */
+#puzzle-panel {
+  flex: 1;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: linear-gradient(180deg, #060c18 0%, #050a14 100%);
+  position: relative;
+  overflow: hidden;
+}
+
+/* Puzzle header (combo bar) */
+#combo-bar {
+  flex-shrink: 0; height: var(--header-h);
+  display: flex; align-items: center; justify-content: center;
+  border-bottom: 1px solid var(--border);
+  background: rgba(0,0,0,0.3);
+}
+#combo-label {
+  font-size: 16px; font-weight: 700; letter-spacing: 3px;
+  color: var(--muted); transition: color 0.2s;
+}
+#combo-label.active {
+  color: #ffbb00;
+  text-shadow: 0 0 12px rgba(255,187,0,0.8), 0 0 30px rgba(255,140,0,0.4);
+  animation: comboBeat 0.45s ease infinite alternate;
+}
+@keyframes comboBeat {
+  from { letter-spacing: 3px; }
+  to   { letter-spacing: 7px; }
+}
+
+/* Board area */
+#board-area {
+  flex: 1;
+  display: flex; align-items: center; justify-content: center;
+  padding: 20px;
+  position: relative;
+}
+
+#board-wrap {
+  position: relative; padding: 8px;
+  border-radius: 18px;
+  background: rgba(0,0,0,0.5);
+  border: 1px solid var(--border-hi);
+  box-shadow: inset 0 3px 16px rgba(0,0,0,0.7), 0 0 40px rgba(0,0,0,0.5);
+}
+#board { position: relative; }
+
+/* Puzzle footer */
+#puzzle-footer {
+  flex-shrink: 0; height: var(--footer-h);
+  display: flex; align-items: center; justify-content: center;
+  border-top: 1px solid var(--border);
+  background: rgba(0,0,0,0.3);
+  font-size: 11px; color: var(--muted); letter-spacing: 1px;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   LOG PANEL — 4th column (far right)
+═══════════════════════════════════════════════════════════════ */
+#log-panel {
+  width: var(--log-w);
+  height: 100%;
+  flex-shrink: 0;
+  background: #060d18;
+  border-left: 1px solid var(--border-hi);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.log-header {
+  flex-shrink: 0;
+  display: flex; flex-direction: column;
+  background: rgba(0,0,0,0.45);
+  border-bottom: 1px solid var(--border-hi);
+}
+
+.log-header-top {
+  height: var(--header-h);
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 14px;
+}
+.log-header-title { font-size: 12px; font-weight: 700; color: var(--text); letter-spacing: 0.5px; }
+
+#log-clear-btn {
+  background: rgba(255,255,255,0.05);
+  border: 1px solid var(--border-hi);
+  border-radius: 6px;
+  color: var(--muted-hi);
+  font-family: inherit;
+  font-size: 10px;
+  padding: 4px 8px;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+#log-clear-btn:hover { color: var(--text); border-color: var(--muted-hi); }
+
+/* 필터 탭 행 */
+#log-filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 7px 10px 9px;
+  border-top: 1px solid var(--border);
+}
+
+.log-filter-btn {
+  display: flex; align-items: center; gap: 3px;
+  padding: 3px 7px;
+  border: 1px solid var(--border-hi);
+  border-radius: 12px;
+  background: rgba(0,0,0,0.35);
+  color: var(--muted-hi);
+  font-family: inherit;
+  font-size: 9px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s, opacity 0.15s;
+  user-select: none;
+  white-space: nowrap;
+}
+.log-filter-btn .ficon { font-size: 11px; }
+
+/* 활성 상태 — 타입별 accent 색상 */
+.log-filter-btn.active-atk   { border-color: var(--atk);   color: #ff8888;  background: rgba(232,64,64,0.12); }
+.log-filter-btn.active-def   { border-color: var(--def);   color: #88c4ff;  background: rgba(48,128,216,0.12); }
+.log-filter-btn.active-spl   { border-color: var(--spl);   color: #80f0a0;  background: rgba(40,200,96,0.12); }
+.log-filter-btn.active-hel   { border-color: var(--hel);   color: #ff88d8;  background: rgba(224,48,160,0.12); }
+.log-filter-btn.active-ap    { border-color: var(--ap);    color: #f8d870;  background: rgba(240,192,64,0.12); }
+.log-filter-btn.active-enemy { border-color: #d05050;      color: #ff7070;  background: rgba(208,58,58,0.12); }
+.log-filter-btn.active-combo { border-color: #f0a030;      color: #ffc060;  background: rgba(240,160,48,0.12); }
+.log-filter-btn.active-sys   { border-color: var(--muted-hi); color: var(--text); background: rgba(74,106,130,0.15); }
+
+/* 비활성(숨김) 상태 */
+.log-filter-btn.inactive { opacity: 0.32; }
+
+/* 필터로 숨겨진 엔트리 */
+.log-entry.log-hidden { display: none; }
+
+#log-scroll {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 6px 0;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-hi) transparent;
+}
+#log-scroll::-webkit-scrollbar { width: 3px; }
+#log-scroll::-webkit-scrollbar-thumb { background: var(--border-hi); border-radius: 2px; }
+
+.log-entry {
+  display: flex; align-items: baseline; gap: 7px;
+  padding: 5px 13px;
+  font-size: 11px;
+  line-height: 1.4;
+  border-left: 2px solid transparent;
+  transition: background 0.1s;
+}
+.log-entry:hover { background: rgba(255,255,255,0.025); }
+
+.log-icon { flex-shrink: 0; font-size: 12px; width: 18px; text-align: center; }
+.log-msg  { flex: 1; word-break: keep-all; overflow-wrap: break-word; }
+
+/* 로그 타입별 색상 */
+.log-atk   { border-left-color: var(--atk); }
+.log-atk   .log-msg { color: #ff8888; }
+
+.log-def   { border-left-color: var(--def); }
+.log-def   .log-msg { color: #88c4ff; }
+
+.log-spl   { border-left-color: var(--spl); }
+.log-spl   .log-msg { color: #80f0a0; }
+
+.log-hel   { border-left-color: var(--hel); }
+.log-hel   .log-msg { color: #ff88d8; }
+
+.log-ap    { border-left-color: var(--ap); }
+.log-ap    .log-msg { color: #f8d870; }
+
+.log-enemy { border-left-color: #d05050; }
+.log-enemy .log-msg { color: #ff7070; }
+
+.log-combo { border-left-color: #f0a030; }
+.log-combo .log-msg { color: #ffc060; }
+
+.log-sys   { border-left-color: var(--muted); }
+.log-sys   .log-msg { color: var(--muted-hi); }
+
+.log-win   { border-left-color: #f0c040; }
+.log-win   .log-msg { color: #ffe070; font-weight: 700; }
+
+.log-lose  { border-left-color: #e04040; }
+.log-lose  .log-msg { color: #ff7070; font-weight: 700; }
+
+.log-divider {
+  height: 1px;
+  background: var(--border);
+  margin: 4px 12px;
+  opacity: 0.5;
+}
+
+#log-footer {
+  flex-shrink: 0;
+  height: var(--footer-h);
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+  border-top: 1px solid var(--border);
+  background: rgba(0,0,0,0.3);
+  font-size: 10px; color: var(--muted);
+}
+#log-count       { font-weight: 700; color: var(--muted-hi); }
+#log-visible-cnt { font-weight: 700; color: var(--spl); }
+
+/* ═══════════════════════════════════════════════════════════════
+   TILES
+═══════════════════════════════════════════════════════════════ */
+.tile {
+  position: absolute; border-radius: 12px;
+  display: flex; align-items: center; justify-content: center;
+  cursor: grab; will-change: top, left;
+  transition: top 0.25s cubic-bezier(0.35,0,0.25,1),
+              left 0.25s cubic-bezier(0.35,0,0.25,1), opacity 0.2s;
+}
+.tile.dragging {
+  cursor: grabbing; transition: none; z-index: 50;
+  filter: brightness(1.5) drop-shadow(0 10px 28px rgba(0,0,0,0.8));
+  transform: scale(1.12);
+}
+.tile.drag-target {
+  animation: targetPulse 0.4s ease-in-out infinite alternate; z-index: 4;
+}
+@keyframes targetPulse {
+  from { filter: brightness(1.0); box-shadow: 0 0 10px rgba(255,255,255,0.3); transform: scale(1.0); }
+  to   { filter: brightness(1.7); box-shadow: 0 0 24px rgba(255,255,255,0.8); transform: scale(1.07); }
+}
+.tile[data-type="0"] {
+  background: linear-gradient(145deg, #c02828, #e84040, #ff7070);
+  border: 2px solid rgba(255,130,130,0.65);
+  box-shadow: 0 4px 14px rgba(232,64,64,0.55), inset 0 1px 0 rgba(255,255,255,0.2);
+}
+.tile[data-type="1"] {
+  background: linear-gradient(145deg, #1050a8, #3080d8, #60b0ff);
+  border: 2px solid rgba(110,180,255,0.65);
+  box-shadow: 0 4px 14px rgba(48,128,216,0.55), inset 0 1px 0 rgba(255,255,255,0.2);
+}
+.tile[data-type="2"] {
+  background: linear-gradient(145deg, #106838, #28c860, #60ee90);
+  border: 2px solid rgba(90,230,130,0.65);
+  box-shadow: 0 4px 14px rgba(40,200,96,0.55), inset 0 1px 0 rgba(255,255,255,0.2);
+}
+.tile[data-type="3"] {
+  background: linear-gradient(145deg, #920070, #e030a0, #ff70cc);
+  border: 2px solid rgba(255,110,210,0.65);
+  box-shadow: 0 4px 14px rgba(224,48,160,0.55), inset 0 1px 0 rgba(255,255,255,0.2);
+}
+.tile.matched {
+  animation: matchPulse 0.35s ease-in-out infinite alternate; z-index: 5;
+}
+@keyframes matchPulse {
+  from { transform: scale(1.0); filter: brightness(1.5); box-shadow: 0 0 16px rgba(255,255,255,0.6); }
+  to   { transform: scale(1.12); filter: brightness(2.4); box-shadow: 0 0 36px rgba(255,255,255,0.95), 0 0 60px rgba(255,255,255,0.4); }
+}
+.tile.removing {
+  pointer-events: none; z-index: 6;
+  animation: tileShatter 0.38s cubic-bezier(0.36,0.07,0.19,0.97) forwards;
+}
+@keyframes tileShatter {
+  0%   { transform: scale(1.05) rotate(0deg);  opacity: 1;   filter: brightness(1.5); }
+  40%  { transform: scale(1.4)  rotate(4deg);  opacity: 0.7; filter: brightness(2.5); }
+  70%  { transform: scale(0.6)  rotate(-3deg); opacity: 0.3; filter: brightness(3); }
+  100% { transform: scale(0)    rotate(0deg);  opacity: 0; }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   FLOATING TEXT
+═══════════════════════════════════════════════════════════════ */
+.float-text {
+  position: fixed; font-size: 22px; font-weight: 900;
+  pointer-events: none; z-index: 9000;
+  text-shadow: 0 3px 12px rgba(0,0,0,0.95), 0 0 24px currentColor;
+  white-space: nowrap;
+  animation: floatUp 1.6s cubic-bezier(0.2,0.8,0.3,1) forwards;
+}
+@keyframes floatUp {
+  0%   { opacity: 1; transform: translateY(0)   scale(0.8); }
+  18%  { opacity: 1; transform: translateY(-18px) scale(1.3); }
+  100% { opacity: 0; transform: translateY(-90px) scale(1.0); }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   OVERLAY (game over)
+═══════════════════════════════════════════════════════════════ */
+#overlay {
+  position: fixed; inset: 0;
+  background: rgba(6,10,16,0.92); display: none;
+  flex-direction: column; align-items: center; justify-content: center;
+  gap: 16px; z-index: 8000; backdrop-filter: blur(6px);
+}
+#overlay-title {
+  font-size: 48px; font-weight: 900; letter-spacing: 3px;
+  text-shadow: 0 0 40px currentColor;
+  animation: overlayPop 0.5s cubic-bezier(0.34,1.56,0.64,1) both;
+}
+@keyframes overlayPop {
+  from { transform: scale(0.4); opacity: 0; }
+  to   { transform: scale(1);   opacity: 1; }
+}
+#overlay-sub  { font-size: 16px; letter-spacing: 1px; color: var(--muted-hi); }
+#overlay-stats { font-size: 15px; color: var(--muted); text-align: center; line-height: 2; }
+#overlay-btn {
+  margin-top: 12px; padding: 16px 48px;
+  background: linear-gradient(135deg, #1a5090, #3a8fd0);
+  border: none; border-radius: 12px; color: #fff;
+  font-family: inherit; font-size: 16px; font-weight: 700; letter-spacing: 1px;
+  cursor: pointer; box-shadow: 0 6px 20px rgba(58,143,208,0.5), inset 0 1px 0 rgba(255,255,255,0.2);
+  transition: filter 0.15s, transform 0.1s;
+}
+#overlay-btn:hover { filter: brightness(1.2); }
+#overlay-btn:active { transform: scale(0.97); }
+</style>
+</head>
+<body>
+<div id="root">
+
+<!-- ══ 좌측: 스탯 설정 패널 ════════════════════════════════ -->
+<div id="config-panel">
+  <div class="cfg-header"><span>⚙ 스탯 설정</span></div>
+
+  <div class="cfg-scroll">
+
+    <div class="cfg-section">
+      <div class="cfg-lbl player"><span class="lbl-icon">💀</span><span class="lbl-text">데스나이트</span></div>
+      <div class="cfg-row"><label>HP</label>
+        <input type="number" id="cfg-p-hp" value="100" min="1" max="9999" step="10">
+      </div>
+      <div class="cfg-row"><label>방어</label>
+        <input type="number" id="cfg-p-def" value="5" min="0" max="999">
+      </div>
+      <div class="cfg-row"><label>행동력</label>
+        <input type="number" id="cfg-p-ap" value="3" min="1" max="10">
+      </div>
+    </div>
+
+    <div class="cfg-sep"></div>
+
+    <div class="cfg-section">
+      <div class="cfg-lbl boss"><span class="lbl-icon">🐉</span><span class="lbl-text">보스</span></div>
+      <div class="cfg-row boss-row"><label>HP</label>
+        <input type="number" id="cfg-b-hp" value="200" min="1" max="9999" step="10">
+      </div>
+      <div class="cfg-row boss-row"><label>공격</label>
+        <input type="number" id="cfg-b-atk" value="18" min="1" max="999">
+      </div>
+    </div>
+
+    <div class="cfg-sep"></div>
+
+    <div class="cfg-section">
+      <div class="cfg-lbl cfg-tile"><span class="lbl-icon">🎲</span><span class="lbl-text">타일 효과량</span></div>
+      <div class="cfg-tile-grid">
+        <div class="cfg-tile-cell" data-t="0"><span class="emoji">⚔️</span>
+          <input type="number" id="cfg-dmg-atk" value="12" min="0" max="999">
+        </div>
+        <div class="cfg-tile-cell" data-t="1"><span class="emoji">🛡️</span>
+          <input type="number" id="cfg-dmg-def" value="8" min="0" max="999">
+        </div>
+        <div class="cfg-tile-cell" data-t="2"><span class="emoji">💨</span>
+          <input type="number" id="cfg-dmg-spl" value="10" min="0" max="999">
+        </div>
+        <div class="cfg-tile-cell" data-t="3"><span class="emoji">💖</span>
+          <input type="number" id="cfg-dmg-hel" value="6" min="0" max="999">
+        </div>
+      </div>
+      <div class="cfg-note">타일 수 × 효과량 × 콤보 배율</div>
+    </div>
+
+    <div class="cfg-sep"></div>
+
+    <!-- 행동 게이지 -->
+    <div class="cfg-section">
+      <div class="cfg-lbl gauge"><span class="lbl-icon">💚</span><span class="lbl-text">행동 게이지</span></div>
+      <div class="cfg-row gauge-row"><label>게이지 최대</label>
+        <input type="number" id="cfg-gauge-max" value="10" min="1" max="100">
+      </div>
+      <div class="cfg-row gauge-row"><label>회복량</label>
+        <input type="number" id="cfg-gauge-recover" value="1" min="1" max="10">
+      </div>
+      <div class="cfg-note">
+        <strong>초록(💨) 타일</strong>을 매치하면<br>
+        게이지가 차오릅니다.<br>
+        게이지가 가득 차면<br>
+        행동력이 <strong>회복량</strong>만큼 회복됩니다.
+      </div>
+    </div>
+
+    <div class="cfg-sep"></div>
+
+    <div class="cfg-section">
+      <div class="cfg-lbl combo"><span class="lbl-icon">🔥</span><span class="lbl-text">콤보 배율</span></div>
+      <div class="cfg-row"><label>배율</label>
+        <input type="number" id="cfg-combo-bonus" value="1.0" min="0" max="10" step="0.5">
+      </div>
+      <div class="cfg-note">
+        N콤보 = ×(1+(N-1)×배율)<br>
+        0.0 → 콤보 배율 없음
+      </div>
+    </div>
+
+    <div class="cfg-sep"></div>
+
+    <div class="cfg-section">
+      <div class="cfg-lbl cfg-tile"><span class="lbl-icon">📐</span><span class="lbl-text">계산식</span></div>
+      <div class="cfg-note-rows">
+        <div class="cfg-note-row"><span class="nr-icon">⚔️</span><span>공격 = 효과량 × 타일 × 콤보</span></div>
+        <div class="cfg-note-row"><span class="nr-icon">💨</span><span>특수 = 효과량 × 타일 × 콤보</span></div>
+        <div class="cfg-note-row"><span class="nr-icon">💖</span><span>회복 = 효과량 × 타일</span></div>
+        <div class="cfg-note-row"><span class="nr-icon">🛡️</span><span>방어막 = 효과량 × 타일</span></div>
+        <div class="cfg-note-row"><span class="nr-icon">💚</span><span>게이지 가득 시 AP 회복</span></div>
+      </div>
+    </div>
+
+  </div><!-- /cfg-scroll -->
+
+  <div class="cfg-bottom">
+    <button class="cfg-btn" id="btn-apply" onclick="applyConfig()">▶ 적용</button>
+    <button class="cfg-btn" id="btn-reset" onclick="resetConfig()">↺ 초기화</button>
+    <div id="cfg-feedback"></div>
+  </div>
+</div><!-- /config-panel -->
+
+
+<!-- ══ 중앙: 전투 패널 ════════════════════════════════════ -->
+<div id="battle-panel">
+  <div id="battle-header">
+    <h1>💀 데스나이트 퀘스트</h1>
+    <div id="turn-indicator">▶ 플레이어 턴</div>
+  </div>
+
+  <!-- ── 전투 스테이지 ── -->
+  <div id="battle-stage">
+    <div id="stage-bg"></div>
+
+    <!-- 스테이지 HP 바 (상단 오버레이) -->
+    <div class="stage-hp" id="stage-hp-player">
+      <div class="stage-hp-name">데스나이트</div>
+      <div class="stage-hp-text" id="p-hp-text">100/100</div>
+      <div class="stage-bar-track">
+        <div class="stage-bar-fill" id="p-hp-bar" style="width:100%"></div>
+      </div>
+    </div>
+    <div class="stage-hp" id="stage-hp-boss">
+      <div class="stage-hp-name">드래곤 군주</div>
+      <div class="stage-hp-text" id="b-hp-text">200/200</div>
+      <div class="stage-bar-track">
+        <div class="stage-bar-fill" id="b-hp-bar" style="width:100%"></div>
+      </div>
+    </div>
+
+    <!-- 플레이어 캐릭터 — 데스나이트 -->
+    <div class="battle-char" id="player-box">
+      <div class="char-sprite">
+        <div class="dk-aura"></div>
+        <span class="dk-skull">💀</span>
+        <span class="dk-sword">⚔️</span>
+      </div>
+      <div class="char-shadow"></div>
+      <div class="char-name-tag">데스나이트</div>
+    </div>
+
+    <!-- 보스 캐릭터 -->
+    <div class="battle-char" id="boss-box">
+      <div class="char-sprite">🐉</div>
+      <div class="char-shadow"></div>
+      <div class="char-name-tag">군주</div>
+    </div>
+
+    <!-- 히트 이펙트 레이어 -->
+    <div id="hit-effect-layer"></div>
+  </div><!-- /battle-stage -->
+
+  <!-- ── 스탯 패널 (2열) ── -->
+  <div id="battle-stats">
+
+    <!-- 플레이어 스탯 -->
+    <div class="bstat-panel" id="player-stat-panel">
+      <div class="bstat-title">💀 데스나이트</div>
+
+      <div class="hp-row">
+        <div class="hp-label-row">
+          <span class="hp-label">HP</span>
+          <span class="hp-text" id="p-hp-text2">100/100</span>
+        </div>
+        <div class="bar-track"><div class="bar-fill hp-fill" id="p-hp-bar2"></div></div>
+      </div>
+
+      <div class="shield-card" id="shield-row">
+        <div class="shield-top">
+          <span class="shield-lbl">🛡️ 방어막</span>
+          <span class="shield-num" id="shield-val">0</span>
+        </div>
+        <div class="shield-bar-track">
+          <div class="shield-bar-fill" id="shield-bar"></div>
+        </div>
+        <span class="shield-desc">적 공격 피해를 흡수</span>
+      </div>
+
+      <div class="ap-card">
+        <div class="ap-top">
+          <span class="ap-lbl">⚡ 행동력</span>
+          <span class="ap-num" id="p-ap-text">3/3</span>
+        </div>
+        <div class="ap-pips" id="p-ap-pips"></div>
+      </div>
+
+      <div class="ap-gauge-card" id="ap-gauge-card">
+        <div class="ap-gauge-top">
+          <span class="ap-gauge-lbl">💚 게이지</span>
+          <span class="ap-gauge-frac" id="ap-gauge-frac">0/10</span>
+        </div>
+        <div class="ap-gauge-bar-track">
+          <div class="ap-gauge-bar-fill" id="ap-gauge-bar"></div>
+        </div>
+        <span class="ap-gauge-desc" id="ap-gauge-desc">💨 매치 시 충전</span>
+      </div>
+    </div>
+
+    <!-- 보스 스탯 -->
+    <div class="bstat-panel" id="boss-stat-panel">
+      <div class="bstat-title">🐉 드래곤 군주</div>
+
+      <div class="hp-row">
+        <div class="hp-label-row">
+          <span class="hp-label">HP</span>
+          <span class="hp-text" id="b-hp-text2">200/200</span>
+        </div>
+        <div class="bar-track"><div class="bar-fill hp-fill" id="b-hp-bar2"></div></div>
+      </div>
+
+      <div class="bchip-row">
+        <div class="bchip">
+          <span class="bchip-l">공격력</span>
+          <span class="bchip-v" id="b-atk-val">18</span>
+        </div>
+        <div class="bchip">
+          <span class="bchip-l">다음 피해</span>
+          <span class="bchip-v" id="b-next-atk" style="color:#ff8080">18</span>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /battle-stats -->
+
+  <div id="battle-footer">
+    <div class="legend"><div class="ldot" style="background:var(--atk)"></div>⚔️ 공격</div>
+    <div class="legend"><div class="ldot" style="background:var(--def)"></div>🛡️ 방어</div>
+    <div class="legend"><div class="ldot" style="background:var(--spl)"></div>💨 특수</div>
+    <div class="legend"><div class="ldot" style="background:var(--hel)"></div>💖 회복</div>
+  </div>
+</div><!-- /battle-panel -->
+
+
+<!-- ══ 우측: 퍼즐 패널 ════════════════════════════════════ -->
+<div id="puzzle-panel">
+  <div id="combo-bar"><div id="combo-label">퍼즐 보드</div></div>
+
+  <div id="board-area">
+    <div id="board-wrap"><div id="board"></div></div>
+  </div>
+
+  <div id="puzzle-footer">블록을 드래그해 3개 이상 맞추세요 — 행동력을 모두 사용하면 적의 턴</div>
+</div><!-- /puzzle-panel -->
+
+<!-- ══ 우측끝: 전투 로그 패널 ════════════════════════════ -->
+<div id="log-panel">
+  <div class="log-header">
+    <div class="log-header-top">
+      <span class="log-header-title">📋 전투 로그</span>
+      <button id="log-clear-btn" onclick="clearLog()">지우기</button>
+    </div>
+    <div id="log-filter-bar">
+      <button class="log-filter-btn active-atk"   data-filter="atk"   onclick="toggleFilter('atk')"  ><span class="ficon">⚔️</span>공격</button>
+      <button class="log-filter-btn active-def"   data-filter="def"   onclick="toggleFilter('def')"  ><span class="ficon">🛡️</span>방어</button>
+      <button class="log-filter-btn active-spl"   data-filter="spl"   onclick="toggleFilter('spl')"  ><span class="ficon">💨</span>특수</button>
+      <button class="log-filter-btn active-hel"   data-filter="hel"   onclick="toggleFilter('hel')"  ><span class="ficon">💖</span>회복</button>
+      <button class="log-filter-btn active-ap"    data-filter="ap"    onclick="toggleFilter('ap')"   ><span class="ficon">⚡</span>AP</button>
+      <button class="log-filter-btn active-enemy" data-filter="enemy" onclick="toggleFilter('enemy')"><span class="ficon">🐉</span>적</button>
+      <button class="log-filter-btn active-combo" data-filter="combo" onclick="toggleFilter('combo')"><span class="ficon">🔥</span>콤보</button>
+      <button class="log-filter-btn active-sys"   data-filter="sys"   onclick="toggleFilter('sys')"  ><span class="ficon">•</span>시스템</button>
+    </div>
+  </div>
+  <div id="log-scroll"></div>
+  <div id="log-footer">
+    표시 <span id="log-visible-cnt">0</span> / 전체 <span id="log-count">0</span>
+  </div>
+</div><!-- /log-panel -->
+
+</div><!-- /root -->
+
+<!-- overlay -->
+<div id="overlay">
+  <div id="overlay-title">💀 패배</div>
+  <div id="overlay-sub">당신은 쓰러졌습니다...</div>
+  <div id="overlay-stats"></div>
+  <button id="overlay-btn" onclick="restartBattle()">↺ 다시 시작</button>
+</div>
+
+<script>
+'use strict';
+
+const ANIMATION_DELAY = 1000;
+const COLS = 5;
+const ROWS = 6;
+const GAP  = 8; // 타일 간격 (px) — 큰 화면용
+
+const TILE_DEF = [
+  { name: '공격', emoji: '⚔️'  },
+  { name: '방어', emoji: '🛡️' },
+  { name: '특수', emoji: '💨'  },
+  { name: '회복', emoji: '💖'  },
+];
+
+const S = Object.freeze({ IDLE: 0, ANIMATING: 1, ENEMY: 2, OVER: 3 });
+let gameState = S.IDLE;
+
+const DEFAULT_CFG = {
+  playerHP: 100, playerDef: 5, playerAP: 3,
+  bossHP: 200, bossATK: 18,
+  dmgAtk: 12, dmgDef: 8, dmgSpl: 10, dmgHel: 6,
+  comboBonus: 1.0,
+  apGaugeMax: 10,   // 게이지 최대값 (초록 타일 누적 수)
+  apGaugeRecover: 1, // 게이지 가득 찼을 때 회복할 AP
+};
+let cfg = { ...DEFAULT_CFG };
+
+let playerHP      = cfg.playerHP;
+let bossHP        = cfg.bossHP;
+let tileShield    = 0;
+let currentAP     = cfg.playerAP;
+let apGaugeProgress = 0; // 현재 행동 게이지 진행량 (초록 타일 누적)
+
+let board   = [];
+let tileEls = [];
+
+let drag = {
+  on: false, fromY: -1, fromX: -1,
+  el: null, boardRect: null, targetY: -1, targetX: -1,
+};
+
+let comboCount = 0;
+let matchAcc   = [0, 0, 0, 0];
+
+let TILE_SIZE;
+let boardEl;
+
+// ═══ 레이아웃 계산 (화면에 맞게 타일 크기 동적 결정) ════════════
+function computeLayout() {
+  boardEl = document.getElementById('board');
+  const area = document.getElementById('board-area');
+  const aW = area.clientWidth  - 40; // padding
+  const aH = area.clientHeight - 40;
+  const byW = Math.floor((aW - GAP * (COLS - 1)) / COLS);
+  const byH = Math.floor((aH - GAP * (ROWS - 1)) / ROWS);
+  TILE_SIZE = Math.max(40, Math.min(byW, byH));
+  boardEl.style.width  = (COLS * TILE_SIZE + (COLS - 1) * GAP) + 'px';
+  boardEl.style.height = (ROWS * TILE_SIZE + (ROWS - 1) * GAP) + 'px';
+}
+
+const tileTop  = y => y * (TILE_SIZE + GAP);
+const tileLeft = x => x * (TILE_SIZE + GAP);
+
+// ═══ 초기화 ═══════════════════════════════════════════════════════
+function init() {
+  computeLayout();
+  board   = Array.from({ length: ROWS }, () => new Array(COLS).fill(0));
+  tileEls = Array.from({ length: ROWS }, () => new Array(COLS).fill(null));
+
+  for (let y = 0; y < ROWS; y++)
+    for (let x = 0; x < COLS; x++)
+      board[y][x] = randType();
+  cleanInitialBoard();
+
+  boardEl.innerHTML = '';
+  for (let y = 0; y < ROWS; y++)
+    for (let x = 0; x < COLS; x++) {
+      const el = makeTileEl(board[y][x], y, x);
+      tileEls[y][x] = el;
+      boardEl.appendChild(el);
+    }
+
+  initDrag();
+  updateDisplay();
+}
+
+// 창 크기 변경 시 보드 재계산
+window.addEventListener('resize', () => {
+  if (gameState === S.IDLE) {
+    computeLayout();
+    for (let y = 0; y < ROWS; y++)
+      for (let x = 0; x < COLS; x++) {
+        const el = tileEls[y][x];
+        if (!el) continue;
+        el.style.width  = TILE_SIZE + 'px';
+        el.style.height = TILE_SIZE + 'px';
+        el.style.fontSize = Math.round(TILE_SIZE * 0.38) + 'px';
+        el.style.lineHeight = TILE_SIZE + 'px';
+        positionTile(el, +el.dataset.y, +el.dataset.x);
+      }
+  }
+});
+
+function randType() { return (Math.random() * 4) | 0; }
+
+function cleanInitialBoard() {
+  for (let pass = 0; pass < 6; pass++)
+    for (let y = 0; y < ROWS; y++)
+      for (let x = 0; x < COLS; x++)
+        while (wouldCauseMatch(y, x)) board[y][x] = randType();
+}
+
+function wouldCauseMatch(y, x) {
+  const t = board[y][x];
+  if (x >= 2 && board[y][x-1] === t && board[y][x-2] === t) return true;
+  if (y >= 2 && board[y-1][x] === t && board[y-2][x] === t) return true;
+  return false;
+}
+
+// ═══ 타일 DOM ═════════════════════════════════════════════════════
+function makeTileEl(type, y, x) {
+  const el = document.createElement('div');
+  el.className    = 'tile';
+  el.dataset.type = type;
+  el.dataset.y    = y;
+  el.dataset.x    = x;
+  el.textContent  = TILE_DEF[type].emoji;
+  el.style.cssText = [
+    `width:${TILE_SIZE}px`, `height:${TILE_SIZE}px`,
+    `top:${tileTop(y)}px`, `left:${tileLeft(x)}px`,
+    `font-size:${Math.round(TILE_SIZE * 0.38)}px`,
+    `line-height:${TILE_SIZE}px`,
+  ].join(';');
+  return el;
+}
+
+function positionTile(el, y, x) {
+  el.style.top  = tileTop(y)  + 'px';
+  el.style.left = tileLeft(x) + 'px';
+  el.dataset.y  = y;
+  el.dataset.x  = x;
+}
+
+// ═══ 드래그 & 드롭 (follow-mouse) ════════════════════════════════
+function initDrag() {
+  boardEl.addEventListener('mousedown',  onPointerDown);
+  window.addEventListener('mousemove',   onPointerMove);
+  window.addEventListener('mouseup',     onPointerUp);
+  boardEl.addEventListener('touchstart', onPointerDown, { passive: false });
+  window.addEventListener('touchmove',   onPointerMove, { passive: false });
+  window.addEventListener('touchend',    onPointerUp);
+}
+
+function clientXY(e) {
+  const src = e.touches ? e.touches[0] : e;
+  return { cx: src.clientX, cy: src.clientY };
+}
+
+function boardCell(cx, cy) {
+  const r  = drag.boardRect || boardEl.getBoundingClientRect();
+  const rx = cx - r.left, ry = cy - r.top;
+  const x  = Math.floor(rx / (TILE_SIZE + GAP));
+  const y  = Math.floor(ry / (TILE_SIZE + GAP));
+  if (x < 0 || x >= COLS || y < 0 || y >= ROWS) return null;
+  return { x, y };
+}
+
+function isAdjacent(y1, x1, y2, x2) {
+  return (Math.abs(y1 - y2) + Math.abs(x1 - x2)) === 1;
+}
+
+function onPointerDown(e) {
+  if (gameState !== S.IDLE) return;
+  const { cx, cy } = clientXY(e);
+  const cell = boardCell(cx, cy);
+  if (!cell) return;
+  drag.on      = true;
+  drag.fromY   = cell.y;
+  drag.fromX   = cell.x;
+  drag.el      = tileEls[cell.y][cell.x];
+  drag.boardRect = boardEl.getBoundingClientRect();
+  drag.targetY = -1;
+  drag.targetX = -1;
+  if (drag.el) {
+    drag.el.style.transition = 'none';
+    drag.el.classList.add('dragging');
+    drag.el.style.zIndex = '50';
+  }
+  if (e.touches) e.preventDefault();
+}
+
+function onPointerMove(e) {
+  if (!drag.on || gameState !== S.IDLE) return;
+  const { cx, cy } = clientXY(e);
+  const r = drag.boardRect;
+
+  if (drag.el) {
+    drag.el.style.left = (cx - r.left - TILE_SIZE / 2) + 'px';
+    drag.el.style.top  = (cy - r.top  - TILE_SIZE / 2) + 'px';
+  }
+
+  const cell = boardCell(cx, cy);
+  let newTY = -1, newTX = -1;
+  if (cell && !(cell.y === drag.fromY && cell.x === drag.fromX)) {
+    if (isAdjacent(drag.fromY, drag.fromX, cell.y, cell.x)) {
+      newTY = cell.y; newTX = cell.x;
+    }
+  }
+
+  if (drag.targetY >= 0) {
+    const prev = tileEls[drag.targetY][drag.targetX];
+    if (prev) prev.classList.remove('drag-target');
+  }
+  drag.targetY = newTY; drag.targetX = newTX;
+  if (newTY >= 0) {
+    const next = tileEls[newTY][newTX];
+    if (next) next.classList.add('drag-target');
+  }
+
+  if (e.touches) e.preventDefault();
+}
+
+function onPointerUp() {
+  if (!drag.on) return;
+  drag.on = false;
+
+  if (drag.el) {
+    drag.el.classList.remove('dragging');
+    drag.el.style.zIndex = '';
+    drag.el.style.transition = '';
+  }
+  if (drag.targetY >= 0) {
+    const tgt = tileEls[drag.targetY][drag.targetX];
+    if (tgt) tgt.classList.remove('drag-target');
+  }
+
+  const { fromY, fromX, targetY, targetX } = drag;
+  drag = { on: false, fromY: -1, fromX: -1, el: null, boardRect: null, targetY: -1, targetX: -1 };
+
+  if (targetY < 0 || !isAdjacent(fromY, fromX, targetY, targetX)) {
+    if (tileEls[fromY]?.[fromX]) positionTile(tileEls[fromY][fromX], fromY, fromX);
+    return;
+  }
+
+  processSwap(fromY, fromX, targetY, targetX);
+}
+
+// ═══ 스왑 처리 ════════════════════════════════════════════════════
+async function processSwap(y1, x1, y2, x2) {
+  if (gameState !== S.IDLE) return;
+
+  const el1 = tileEls[y1][x1], el2 = tileEls[y2][x2];
+  [board[y1][x1], board[y2][x2]] = [board[y2][x2], board[y1][x1]];
+  positionTile(el1, y2, x2);
+  positionTile(el2, y1, x1);
+  [tileEls[y1][x1], tileEls[y2][x2]] = [el2, el1];
+
+  currentAP = Math.max(0, currentAP - 1);
+  updateAPDisplay();
+  addLog(`행동력 사용 → 남은 AP: ${currentAP}/${cfg.playerAP}`, 'ap');
+
+  await delay(280);
+  const matches = findMatches();
+
+  if (matches.size === 0) {
+    [board[y1][x1], board[y2][x2]] = [board[y2][x2], board[y1][x1]];
+    positionTile(el1, y1, x1); positionTile(el2, y2, x2);
+    [tileEls[y1][x1], tileEls[y2][x2]] = [el1, el2];
+    addLog('매치 없음 — 원위치 복귀', 'sys');
+    await delay(280);
+  } else {
+    gameState  = S.ANIMATING;
+    comboCount = 0;
+    matchAcc   = [0, 0, 0, 0];
+    await runComboChain(matches);
+    if (gameState === S.OVER) return;
+  }
+
+  if (currentAP <= 0) {
+    addLog('행동력 소진 → 적의 턴 시작', 'sys');
+    setComboLabel(0);
+    await delay(Math.floor(ANIMATION_DELAY * 0.4));
+    await doEnemyTurn();
+    if (gameState === S.OVER) return;
+    currentAP = cfg.playerAP;
+    addLog(`행동력 재충전: ${currentAP}/${cfg.playerAP}`, 'ap');
+    updateAPDisplay();
+  }
+
+  gameState = S.IDLE;
+  setComboLabel(0);
+  setTurnText('▶ 플레이어 턴', '#3a8fd0');
+}
+
+// ═══ 매치 판정 ════════════════════════════════════════════════════
+function findMatches() {
+  const set = new Set();
+  for (let y = 0; y < ROWS; y++)
+    for (let x = 0; x <= COLS - 3; x++) {
+      const t = board[y][x];
+      if (t === null) continue;
+      if (board[y][x+1] !== t || board[y][x+2] !== t) continue;
+      let end = x + 2;
+      while (end + 1 < COLS && board[y][end+1] === t) end++;
+      for (let i = x; i <= end; i++) set.add(`${y},${i}`);
+    }
+  for (let x = 0; x < COLS; x++)
+    for (let y = 0; y <= ROWS - 3; y++) {
+      const t = board[y][x];
+      if (t === null) continue;
+      if (board[y+1][x] !== t || board[y+2][x] !== t) continue;
+      let end = y + 2;
+      while (end + 1 < ROWS && board[end+1][x] === t) end++;
+      for (let i = y; i <= end; i++) set.add(`${i},${x}`);
+    }
+  return set;
+}
+
+// ═══ 콤보 체인 ════════════════════════════════════════════════════
+async function runComboChain(matches) {
+  comboCount++;
+  setComboLabel(comboCount);
+
+  // 콤보 수와 타일 구성 로그
+  const typeCounts = [0,0,0,0];
+  for (const key of matches) {
+    const [y, x] = splitKey(key);
+    if (tileEls[y][x]) tileEls[y][x].classList.add('matched');
+    if (board[y][x] !== null) { matchAcc[board[y][x]]++; typeCounts[board[y][x]]++; }
+  }
+  const typeStr = ['⚔️','🛡️','💨','💖']
+    .map((e, i) => typeCounts[i] > 0 ? `${e}×${typeCounts[i]}` : null)
+    .filter(Boolean).join(' ');
+  const multPreview = (1 + (comboCount - 1) * cfg.comboBonus).toFixed(1);
+  addLogDivider(`${comboCount}× 콤보 · ×${multPreview}`);
+  addLog(`${matches.size}개 매치 (${typeStr})`, 'combo');
+
+  await delay(ANIMATION_DELAY);
+
+  const removePs = [];
+  for (const key of matches) {
+    const [y, x] = splitKey(key);
+    const el = tileEls[y][x];
+    board[y][x] = null; tileEls[y][x] = null;
+    if (el) {
+      el.classList.remove('matched'); el.classList.add('removing');
+      removePs.push(new Promise(res => {
+        el.addEventListener('animationend', res, { once: true });
+        setTimeout(res, 500);
+      }));
+    }
+  }
+  await Promise.all(removePs);
+  boardEl.querySelectorAll('.tile.removing').forEach(el => el.remove());
+
+  applyGravity();
+  await delay(ANIMATION_DELAY);
+  const next = findMatches();
+  if (next.size > 0) { await runComboChain(next); }
+  else               { await applyBattleEffects(); }
+}
+
+// ═══ 중력 ════════════════════════════════════════════════════════
+function applyGravity() {
+  for (let x = 0; x < COLS; x++) {
+    let writeY = ROWS - 1;
+    for (let y = ROWS - 1; y >= 0; y--) {
+      if (board[y][x] !== null) {
+        if (y !== writeY) {
+          board[writeY][x]   = board[y][x];   board[y][x]        = null;
+          tileEls[writeY][x] = tileEls[y][x]; tileEls[y][x]      = null;
+          if (tileEls[writeY][x]) positionTile(tileEls[writeY][x], writeY, x);
+        }
+        writeY--;
+      }
+    }
+    const newCount = writeY + 1;
+    for (let y = writeY; y >= 0; y--) {
+      const type = randType();
+      board[y][x] = type;
+      const el = makeTileEl(type, y, x);
+      el.style.top        = tileTop(y - newCount) + 'px';
+      el.style.opacity    = '0';
+      el.style.transition = 'none';
+      boardEl.appendChild(el);
+      tileEls[y][x] = el;
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        el.style.transition = '';
+        el.style.opacity    = '1';
+        el.style.top        = tileTop(y) + 'px';
+      }));
+    }
+  }
+}
+
+// ═══ 전투 효과 ════════════════════════════════════════════════════
+async function applyBattleEffects() {
+  const mult = 1 + (comboCount - 1) * cfg.comboBonus;
+
+  // ⚔️ 공격
+  if (matchAcc[0] > 0) {
+    const dmg = Math.floor(matchAcc[0] * cfg.dmgAtk * mult);
+    const prevHP = bossHP;
+    bossHP = Math.max(0, bossHP - dmg);
+    updateDisplay();
+    addLog(`⚔️ 공격 − ${dmg}  (타일×${matchAcc[0]} × 효과량${cfg.dmgAtk} × ×${mult.toFixed(1)})  보스HP: ${prevHP} → ${bossHP}`, 'atk');
+    await animateAttack('player-box', 'boss-box', 'atk');
+    showFloat('boss-box', `⚔️ −${dmg}`, '#ff6060');
+    await delay(280);
+    if (checkGameOver()) return;
+  }
+
+  // 🛡️ 방어막
+  if (matchAcc[1] > 0) {
+    const shield = matchAcc[1] * cfg.dmgDef;
+    const prevShield = tileShield;
+    tileShield += shield;
+    updateDisplay();
+    addLog(`🛡️ 방어막 +${shield}  (타일×${matchAcc[1]} × 효과량${cfg.dmgDef})  누적: ${prevShield} → ${tileShield}`, 'def');
+    showFloat('player-box', `🛡️ +${shield}`, '#50c8ff');
+    spawnHitEffect(document.getElementById('player-box'), 'def');
+    await delay(280);
+  }
+
+  // 💨 특수 + 행동 게이지
+  if (matchAcc[2] > 0) {
+    const sp = Math.floor(matchAcc[2] * cfg.dmgSpl * mult);
+    const prevHP = bossHP;
+    bossHP = Math.max(0, bossHP - sp);
+
+    const prevGauge = apGaugeProgress;
+    apGaugeProgress += matchAcc[2];
+    let apRecovered = 0;
+    while (apGaugeProgress >= cfg.apGaugeMax) {
+      apGaugeProgress -= cfg.apGaugeMax;
+      apRecovered += cfg.apGaugeRecover;
+    }
+    if (apRecovered > 0) {
+      const prevAP = currentAP;
+      currentAP = Math.min(cfg.playerAP, currentAP + apRecovered);
+      addLog(`⚡ 게이지 충전 완료! AP +${apRecovered}  (${prevAP} → ${currentAP}/${cfg.playerAP})`, 'ap');
+      showFloat('player-box', `⚡ +${apRecovered} AP`, '#f0c040');
+    } else {
+      addLog(`💚 게이지 충전: ${prevGauge} → ${apGaugeProgress}/${cfg.apGaugeMax}`, 'ap');
+    }
+
+    updateDisplay();
+    addLog(`💨 특수 − ${sp}  (타일×${matchAcc[2]} × 효과량${cfg.dmgSpl} × ×${mult.toFixed(1)})  보스HP: ${prevHP} → ${bossHP}`, 'spl');
+    await animateAttack('player-box', 'boss-box', 'spl');
+    showFloat('boss-box', `💨 −${sp}`, '#60ee90');
+    await delay(280);
+    if (checkGameOver()) return;
+  }
+
+  // 💖 회복
+  if (matchAcc[3] > 0) {
+    const heal = matchAcc[3] * cfg.dmgHel;
+    const prevHP = playerHP;
+    playerHP = Math.min(cfg.playerHP, playerHP + heal);
+    const actual = playerHP - prevHP;
+    updateDisplay();
+    addLog(`💖 HP 회복 +${actual}  (타일×${matchAcc[3]} × 효과량${cfg.dmgHel})  데스나이트HP: ${prevHP} → ${playerHP}`, 'hel');
+    showFloat('player-box', `💖 +${actual}`, '#ff80d8');
+    spawnHitEffect(document.getElementById('player-box'), 'hel');
+    await delay(280);
+  }
+}
+
+// ═══ 적 턴 ══════════════════════════════════════════════════════
+async function doEnemyTurn() {
+  gameState = S.ENEMY;
+  setTurnText('🐉 적의 턴', '#d03a3a');
+
+  const totalDef = cfg.playerDef + tileShield;
+  const netDmg   = Math.max(0, cfg.bossATK - totalDef);
+  const absorbed = cfg.bossATK - netDmg;
+  const prevHP   = playerHP;
+
+  tileShield = 0;
+  playerHP   = Math.max(0, playerHP - netDmg);
+  updateDisplay();
+
+  addLogDivider('적의 턴');
+
+  if (netDmg <= 0) {
+    addLog(`🛡️ 완전 차단!  (보스ATK ${cfg.bossATK} vs 방어 ${totalDef})`, 'def');
+    spawnHitEffect(document.getElementById('player-box'), 'def');
+    showFloat('player-box', '🛡️ 완전 차단!', '#50c8ff');
+  } else {
+    if (absorbed > 0) {
+      addLog(`🛡️ 방어막 ${absorbed} 흡수  (기본방어 ${cfg.playerDef} + 방어막 ${absorbed - Math.max(0, absorbed - cfg.playerDef)})`, 'def');
+    }
+    addLog(`💢 데스나이트 피격 − ${netDmg}  (보스ATK ${cfg.bossATK} − 방어 ${totalDef})  HP: ${prevHP} → ${playerHP}`, 'enemy');
+    await animateAttack('boss-box', 'player-box', 'enemy');
+    if (absorbed > 0) showFloat('player-box', `🛡️ ${absorbed} 흡수`, '#50c8ff');
+    showFloat('player-box', `💢 −${netDmg}`, '#ff4545');
+  }
+
+  await delay(ANIMATION_DELAY);
+  checkGameOver();
+}
+
+// ═══ 승/패 ══════════════════════════════════════════════════════
+function checkGameOver() {
+  if (bossHP <= 0) {
+    document.getElementById('boss-box')?.classList.add('char-ko');
+    addLogDivider('게임 종료');
+    addLog(`🏆 승리! 드래곤 군주 처치 (총 콤보: ${comboCount}회)`, 'win');
+    setTimeout(() => showOverlay('🏆 승리!', '드래곤 군주를 쓰러뜨렸습니다!', `총 콤보: ${comboCount}회`, '#ffcc00'), 600);
+    gameState = S.OVER; return true;
+  }
+  if (playerHP <= 0) {
+    document.getElementById('player-box')?.classList.add('char-ko');
+    addLogDivider('게임 종료');
+    addLog('💀 패배... 다음엔 더 잘 해봐요', 'lose');
+    setTimeout(() => showOverlay('💀 패배', '당신은 쓰러졌습니다...', '다음엔 더 잘 할 수 있어요', '#ff4545'), 700);
+    gameState = S.OVER; return true;
+  }
+  return false;
+}
+
+function showOverlay(title, sub, stats, color) {
+  document.getElementById('overlay-title').textContent = title;
+  document.getElementById('overlay-title').style.color = color;
+  document.getElementById('overlay-sub').textContent   = sub;
+  document.getElementById('overlay-stats').textContent = stats;
+  document.getElementById('overlay').style.display     = 'flex';
+}
+
+// ═══ 재시작 ══════════════════════════════════════════════════════
+function restartBattle() {
+  playerHP = cfg.playerHP; bossHP = cfg.bossHP;
+  tileShield = 0; comboCount = 0; matchAcc = [0,0,0,0];
+  currentAP = cfg.playerAP; apGaugeProgress = 0;
+  document.getElementById('overlay').style.display = 'none';
+  // 캐릭터 상태 초기화
+  document.getElementById('player-box')?.classList.remove('char-ko','char-hit','char-attacking');
+  document.getElementById('boss-box')?.classList.remove('char-ko','char-hit','char-attacking');
+  clearLog();
+  updateDisplay();
+  gameState = S.IDLE;
+  setComboLabel(0);
+  setTurnText('▶ 플레이어 턴', '#3a8fd0');
+  addLogDivider('전투 시작');
+  addLog(`데스나이트 HP: ${cfg.playerHP}  방어: ${cfg.playerDef}  AP: ${cfg.playerAP}`, 'sys');
+  addLog(`보스 HP: ${cfg.bossHP}  공격력: ${cfg.bossATK}`, 'sys');
+}
+
+// ═══ 설정 적용 ═══════════════════════════════════════════════════
+function applyConfig() {
+  const clamp = (v, mn, mx) => Math.min(mx, Math.max(mn, isNaN(v) ? mn : v));
+  cfg = {
+    playerHP:      clamp(+document.getElementById('cfg-p-hp').value,          1, 9999),
+    playerDef:     clamp(+document.getElementById('cfg-p-def').value,         0, 999),
+    playerAP:      clamp(+document.getElementById('cfg-p-ap').value,          1, 10),
+    bossHP:        clamp(+document.getElementById('cfg-b-hp').value,          1, 9999),
+    bossATK:       clamp(+document.getElementById('cfg-b-atk').value,         1, 999),
+    dmgAtk:        clamp(+document.getElementById('cfg-dmg-atk').value,       0, 999),
+    dmgDef:        clamp(+document.getElementById('cfg-dmg-def').value,       0, 999),
+    dmgSpl:        clamp(+document.getElementById('cfg-dmg-spl').value,       0, 999),
+    dmgHel:        clamp(+document.getElementById('cfg-dmg-hel').value,       0, 999),
+    comboBonus:    clamp(+document.getElementById('cfg-combo-bonus').value,   0, 10),
+    apGaugeMax:    clamp(+document.getElementById('cfg-gauge-max').value,     1, 100),
+    apGaugeRecover:clamp(+document.getElementById('cfg-gauge-recover').value, 1, 10),
+  };
+  document.getElementById('cfg-p-hp').value          = cfg.playerHP;
+  document.getElementById('cfg-p-def').value         = cfg.playerDef;
+  document.getElementById('cfg-p-ap').value          = cfg.playerAP;
+  document.getElementById('cfg-b-hp').value          = cfg.bossHP;
+  document.getElementById('cfg-b-atk').value         = cfg.bossATK;
+  document.getElementById('cfg-dmg-atk').value       = cfg.dmgAtk;
+  document.getElementById('cfg-dmg-def').value       = cfg.dmgDef;
+  document.getElementById('cfg-dmg-spl').value       = cfg.dmgSpl;
+  document.getElementById('cfg-dmg-hel').value       = cfg.dmgHel;
+  document.getElementById('cfg-combo-bonus').value   = cfg.comboBonus;
+  document.getElementById('cfg-gauge-max').value     = cfg.apGaugeMax;
+  document.getElementById('cfg-gauge-recover').value = cfg.apGaugeRecover;
+
+  restartBattle();
+
+  const fb = document.getElementById('cfg-feedback');
+  fb.textContent = '✓ 적용 완료!';
+  fb.classList.add('show');
+  clearTimeout(fb._t);
+  fb._t = setTimeout(() => fb.classList.remove('show'), 2000);
+}
+
+function resetConfig() {
+  document.getElementById('cfg-p-hp').value          = DEFAULT_CFG.playerHP;
+  document.getElementById('cfg-p-def').value         = DEFAULT_CFG.playerDef;
+  document.getElementById('cfg-p-ap').value          = DEFAULT_CFG.playerAP;
+  document.getElementById('cfg-b-hp').value          = DEFAULT_CFG.bossHP;
+  document.getElementById('cfg-b-atk').value         = DEFAULT_CFG.bossATK;
+  document.getElementById('cfg-dmg-atk').value       = DEFAULT_CFG.dmgAtk;
+  document.getElementById('cfg-dmg-def').value       = DEFAULT_CFG.dmgDef;
+  document.getElementById('cfg-dmg-spl').value       = DEFAULT_CFG.dmgSpl;
+  document.getElementById('cfg-dmg-hel').value       = DEFAULT_CFG.dmgHel;
+  document.getElementById('cfg-combo-bonus').value   = DEFAULT_CFG.comboBonus;
+  document.getElementById('cfg-gauge-max').value     = DEFAULT_CFG.apGaugeMax;
+  document.getElementById('cfg-gauge-recover').value = DEFAULT_CFG.apGaugeRecover;
+  applyConfig();
+}
+
+// ═══ 디스플레이 ══════════════════════════════════════════════════
+function updateDisplay() {
+  const pPct = cfg.playerHP > 0 ? Math.max(0, playerHP / cfg.playerHP * 100) : 0;
+  const bPct = cfg.bossHP   > 0 ? Math.max(0, bossHP   / cfg.bossHP   * 100) : 0;
+
+  // 스테이지 HP 바
+  document.getElementById('p-hp-bar').style.width  = pPct + '%';
+  document.getElementById('b-hp-bar').style.width  = bPct + '%';
+  document.getElementById('p-hp-text').textContent = `${Math.max(0, playerHP)}/${cfg.playerHP}`;
+  document.getElementById('b-hp-text').textContent = `${Math.max(0, bossHP)}/${cfg.bossHP}`;
+
+  // 스탯 패널 HP 바 (별도 ID)
+  const pbar2 = document.getElementById('p-hp-bar2');
+  const bbar2 = document.getElementById('b-hp-bar2');
+  const ptxt2 = document.getElementById('p-hp-text2');
+  const btxt2 = document.getElementById('b-hp-text2');
+  if (pbar2) pbar2.style.width  = pPct + '%';
+  if (bbar2) bbar2.style.width  = bPct + '%';
+  if (ptxt2) ptxt2.textContent  = `${Math.max(0, playerHP)}/${cfg.playerHP}`;
+  if (btxt2) btxt2.textContent  = `${Math.max(0, bossHP)}/${cfg.bossHP}`;
+
+  // 보스 스탯 칩
+  document.getElementById('b-atk-val').textContent = cfg.bossATK;
+  const netNext = Math.max(0, cfg.bossATK - cfg.playerDef - tileShield);
+  const nextEl  = document.getElementById('b-next-atk');
+  nextEl.textContent = netNext === 0 ? '차단됨' : netNext;
+  nextEl.style.color = netNext === 0 ? '#50ff80' : netNext < cfg.bossATK ? '#ffcc00' : '#ff8080';
+
+  updateShieldDisplay();
+  updateAPDisplay();
+  updateAPGaugeDisplay();
+}
+
+function updateShieldDisplay() {
+  const sv = document.getElementById('shield-val');
+  const sb = document.getElementById('shield-bar');
+  if (!sv || !sb) return;
+  sv.textContent = tileShield;
+  const pct = cfg.bossATK > 0 ? Math.min(100, tileShield / cfg.bossATK * 100) : 0;
+  sb.style.width = pct + '%';
+  const card = document.getElementById('shield-row');
+  if (card) {
+    card.style.borderColor = tileShield >= cfg.bossATK ? 'rgba(80,200,255,0.7)' : 'rgba(80,200,255,0.25)';
+    card.style.boxShadow   = tileShield >= cfg.bossATK ? '0 0 12px rgba(80,200,255,0.3)' : '';
+  }
+}
+
+function updateAPGaugeDisplay() {
+  const bar  = document.getElementById('ap-gauge-bar');
+  const frac = document.getElementById('ap-gauge-frac');
+  const desc = document.getElementById('ap-gauge-desc');
+  const card = document.getElementById('ap-gauge-card');
+  if (!bar || !frac) return;
+
+  const pct = cfg.apGaugeMax > 0
+    ? Math.min(100, apGaugeProgress / cfg.apGaugeMax * 100) : 0;
+  bar.style.width  = pct + '%';
+  frac.textContent = `${apGaugeProgress} / ${cfg.apGaugeMax}`;
+
+  const full = apGaugeProgress >= cfg.apGaugeMax;
+  if (card) {
+    card.style.borderColor = full ? 'rgba(40,200,96,0.75)' : 'rgba(40,200,96,0.25)';
+    card.style.boxShadow   = full ? '0 0 14px rgba(40,200,96,0.35)' : '';
+  }
+  if (desc) {
+    const needed = cfg.apGaugeMax - apGaugeProgress;
+    desc.textContent = full
+      ? `💚 게이지 가득 — 행동력 +${cfg.apGaugeRecover} 회복!`
+      : `💨 타일 ${needed}개 더 매치하면 행동력 +${cfg.apGaugeRecover} 회복`;
+  }
+}
+
+function updateAPDisplay() {
+  const maxAP  = cfg.playerAP;
+  const pipsEl = document.getElementById('p-ap-pips');
+  if (pipsEl) {
+    pipsEl.innerHTML = '';
+    const show = Math.min(maxAP, 10);
+    for (let i = 0; i < show; i++) {
+      const pip = document.createElement('span');
+      pip.className = 'ap-pip ' + (i < currentAP ? 'active' : 'used');
+      pipsEl.appendChild(pip);
+    }
+    if (maxAP > 10) {
+      const m = document.createElement('span');
+      m.style.cssText = 'font-size:10px;color:var(--ap);margin-left:3px';
+      m.textContent = `+${maxAP - 10}`;
+      pipsEl.appendChild(m);
+    }
+  }
+  const apText = document.getElementById('p-ap-text');
+  if (apText) apText.textContent = `${currentAP} / ${maxAP}`;
+}
+
+// ═══ 로그 시스템 ══════════════════════════════════════════════════
+const LOG_TYPE_ICON = {
+  atk:   '⚔️', def: '🛡️', spl: '💨', hel: '💖',
+  ap:    '⚡',  enemy: '🐉', combo: '🔥', sys: '•',
+  win:   '🏆',  lose: '💀',
+};
+const LOG_MAX = 200;
+
+// 필터 상태: 각 타입이 보이면 true
+const logFilter = {
+  atk: true, def: true, spl: true, hel: true,
+  ap:  true, enemy: true, combo: true, sys: true,
+  win: true, lose: true,   // win/lose는 항상 표시 (필터 버튼 없음)
+};
+
+let logTotalCount   = 0;  // 전체 누적 수
+let logVisibleCount = 0;  // 현재 보이는 수
+
+function addLog(msg, type = 'sys') {
+  const scroll = document.getElementById('log-scroll');
+  if (!scroll) return;
+
+  const isVisible = logFilter[type] !== false;
+
+  const entry = document.createElement('div');
+  entry.className = `log-entry log-${type}${isVisible ? '' : ' log-hidden'}`;
+  entry.dataset.logType = type;
+
+  const icon = document.createElement('span');
+  icon.className   = 'log-icon';
+  icon.textContent = LOG_TYPE_ICON[type] || '•';
+
+  const text = document.createElement('span');
+  text.className   = 'log-msg';
+  text.textContent = msg;
+
+  entry.appendChild(icon);
+  entry.appendChild(text);
+  scroll.appendChild(entry);
+
+  // 최대 엔트리 수 제한 (DOM 성능)
+  while (scroll.children.length > LOG_MAX) scroll.removeChild(scroll.firstChild);
+
+  // 카운터 갱신
+  logTotalCount++;
+  if (isVisible) logVisibleCount++;
+  _updateLogCounters();
+
+  // 현재 필터에 보이는 항목이 있을 때만 스크롤
+  if (isVisible) {
+    requestAnimationFrame(() => { scroll.scrollTop = scroll.scrollHeight; });
+  }
+}
+
+function addLogDivider(label) {
+  const scroll = document.getElementById('log-scroll');
+  if (!scroll) return;
+  const div = document.createElement('div');
+  div.dataset.logType = 'divider';
+  if (label) {
+    div.style.cssText = 'height:auto;background:none;margin:6px 12px 2px;display:flex;align-items:center;gap:6px;';
+    div.innerHTML =
+      `<span style="flex:1;height:1px;background:var(--border)"></span>` +
+      `<span style="font-size:9px;color:var(--muted);letter-spacing:1px;white-space:nowrap">${label}</span>` +
+      `<span style="flex:1;height:1px;background:var(--border)"></span>`;
+  } else {
+    div.className = 'log-divider';
+  }
+  scroll.appendChild(div);
+  requestAnimationFrame(() => { scroll.scrollTop = scroll.scrollHeight; });
+}
+
+function toggleFilter(type) {
+  logFilter[type] = !logFilter[type];
+  const btn = document.querySelector(`.log-filter-btn[data-filter="${type}"]`);
+  if (btn) btn.classList.toggle('inactive', !logFilter[type]);
+
+  // 기존 엔트리에 필터 적용
+  const scroll = document.getElementById('log-scroll');
+  if (!scroll) return;
+  scroll.querySelectorAll(`.log-entry[data-log-type="${type}"]`).forEach(el => {
+    el.classList.toggle('log-hidden', !logFilter[type]);
+  });
+
+  _recountVisible();
+
+  // 필터 후 최신 항목 보이도록 스크롤
+  requestAnimationFrame(() => { scroll.scrollTop = scroll.scrollHeight; });
+}
+
+function clearLog() {
+  const scroll = document.getElementById('log-scroll');
+  if (scroll) scroll.innerHTML = '';
+  logTotalCount   = 0;
+  logVisibleCount = 0;
+  _updateLogCounters();
+}
+
+function _recountVisible() {
+  const scroll = document.getElementById('log-scroll');
+  if (!scroll) return;
+  logVisibleCount = scroll.querySelectorAll('.log-entry:not(.log-hidden)').length;
+  _updateLogCounters();
+}
+
+function _updateLogCounters() {
+  const total   = document.getElementById('log-count');
+  const visible = document.getElementById('log-visible-cnt');
+  if (total)   total.textContent   = logTotalCount;
+  if (visible) visible.textContent = logVisibleCount;
+}
+
+// ═══ UI 헬퍼 ═════════════════════════════════════════════════════
+function showFloat(boxId, text, color) {
+  const box = document.getElementById(boxId);
+  const br  = box.getBoundingClientRect();
+  const el  = document.createElement('div');
+  el.className   = 'float-text';
+  el.textContent = text;
+  el.style.color = color;
+  el.style.left  = Math.round(br.left + br.width  / 2 - 36) + 'px';
+  el.style.top   = Math.round(br.top  - 20) + 'px';
+  document.body.appendChild(el);
+  el.addEventListener('animationend', () => el.remove(), { once: true });
+}
+
+// ── 캐릭터 등장 애니메이션 ──────────────────────────────────────
+function animateAttack(attackerId, targetId, dmgType) {
+  return new Promise(resolve => {
+    const attacker = document.getElementById(attackerId);
+    const target   = document.getElementById(targetId);
+    if (!attacker || !target) { resolve(); return; }
+
+    // 공격 이동 (idle 오버라이드)
+    attacker.classList.add('char-attacking');
+
+    const onAttackEnd = () => {
+      attacker.classList.remove('char-attacking');
+
+      // 피격 이펙트 + 히트 플래시
+      target.classList.add('char-hit');
+      spawnHitEffect(target, dmgType);
+
+      const onHitEnd = () => {
+        target.classList.remove('char-hit');
+        resolve();
+      };
+      // charHitFlash은 .char-sprite에 걸림 → sprite의 animationend
+      const sprite = target.querySelector('.char-sprite');
+      if (sprite) {
+        sprite.addEventListener('animationend', onHitEnd, { once: true });
+      } else {
+        setTimeout(onHitEnd, 450);
+      }
+      setTimeout(onHitEnd, 500); // 안전장치
+    };
+
+    attacker.addEventListener('animationend', onAttackEnd, { once: true });
+    setTimeout(onAttackEnd, 620); // 안전장치
+  });
+}
+
+function spawnHitEffect(targetEl, dmgType) {
+  const layer = document.getElementById('hit-effect-layer');
+  if (!layer || !targetEl) return;
+
+  const tr  = targetEl.getBoundingClientRect();
+  const lr  = layer.getBoundingClientRect();
+  const cx  = tr.left - lr.left + tr.width  / 2;
+  const cy  = tr.top  - lr.top  + tr.height * 0.4;
+
+  const COLORS = { atk:'#ff6060', spl:'#60ee90', enemy:'#ff4545', hel:'#ff80d8', def:'#70c0ff' };
+  const SPARKS  = { atk:'💥', spl:'✨', enemy:'🔥', hel:'💫', def:'🛡️' };
+  const color = COLORS[dmgType] || '#ffffff';
+  const spark = SPARKS[dmgType] || '💥';
+
+  // 방사형 버스트 원
+  const burst = document.createElement('div');
+  burst.className = 'hit-burst';
+  burst.style.cssText = `
+    left:${cx - 45}px; top:${cy - 45}px;
+    width:90px; height:90px;
+    background: radial-gradient(circle, ${color}55 0%, ${color}22 50%, transparent 70%);
+    border: 2px solid ${color}88;
+  `;
+  layer.appendChild(burst);
+
+  // 스파크 이모지
+  const sp = document.createElement('div');
+  sp.className = 'hit-sparks';
+  sp.style.cssText = `left:${cx - 16}px; top:${cy - 16}px;`;
+  sp.textContent = spark;
+  layer.appendChild(sp);
+
+  setTimeout(() => { burst.remove(); sp.remove(); }, 560);
+}
+
+function triggerHit(boxId) {
+  // 레거시 호환 — 스테이지 캐릭터에 hit 클래스 적용
+  const el = document.getElementById(boxId);
+  if (!el) return;
+  el.classList.remove('char-hit');
+  void el.offsetWidth;
+  el.classList.add('char-hit');
+  el.addEventListener('animationend', () => el.classList.remove('char-hit'), { once: true });
+}
+
+function setComboLabel(count) {
+  const el = document.getElementById('combo-label');
+  if (count <= 0)       { el.textContent = '퍼즐 보드'; el.className = ''; }
+  else if (count === 1) { el.textContent = '✨ 매치 성공!'; el.className = 'active'; }
+  else                  { el.textContent = `🔥 ${count}× 콤보!!`; el.className = 'active'; }
+}
+
+function setTurnText(text, color) {
+  const el = document.getElementById('turn-indicator');
+  el.textContent = text; el.style.color = color;
+}
+
+const splitKey = key => key.split(',').map(Number);
+const delay    = ms  => new Promise(r => setTimeout(r, ms));
+
+// 부팅
+init();
+</script>
+</body>
+</html>
